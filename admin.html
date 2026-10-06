@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin · Your Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{--ivory:#FFFBF5;--gold:#B8893B;--gold2:#E9C77B;--plum:#2B1F2A;--line:#eadfce;--blush:#F7DDD5}
+*{box-sizing:border-box;margin:0}body{font:15px/1.6 Manrope,sans-serif;background:var(--ivory);color:var(--plum);padding:24px}
+h1{font:700 34px 'Cormorant Garamond',serif}
+.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.btn{border:0;cursor:pointer;font:700 13px Manrope;padding:9px 18px;border-radius:30px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#fff;text-decoration:none;display:inline-block}
+.btn.ghost{background:none;border:1.5px solid var(--gold);color:var(--gold)}.btn.red{background:#b3414f}.btn.green{background:#3b8a55}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--plum);outline-offset:2px}
+.tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}.tabs .btn{background:#fff;color:var(--plum);border:1.5px solid var(--line)}.tabs .btn.on{background:var(--plum);color:#fff;border-color:var(--plum)}
+.tw{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:20px}
+table{border-collapse:collapse;width:100%;min-width:860px}th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--blush);font-size:13px}
+.pill{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;background:var(--blush)}.pill.approved{background:#E3F3E1}.pill.rejected{background:#f4d4d8}
+textarea,input{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font:inherit}
+dialog{border:0;border-radius:24px;padding:26px;width:min(460px,92vw);box-shadow:0 30px 80px rgba(0,0,0,.25)}dialog::backdrop{background:rgba(43,31,42,.45)}
+.msg{padding:40px;text-align:center}
+</style></head><body>
+<div id="app"><div class="msg"><button class="btn" id="login">Sign in with Google</button></div></div>
+<dialog id="wa"><h3 style="font:700 26px 'Cormorant Garamond'">WhatsApp <span id="wn"></span></h3>
+<p style="margin:8px 0">Opens WhatsApp with your message ready to send.</p>
+<textarea id="wt" rows="4"></textarea><p style="margin-top:14px"><button class="btn green" id="ws">Open WhatsApp</button> <button class="btn ghost" id="wc">Close</button></p></dialog>
+<script>
+const SUPABASE_URL='https://maivfnlxdytjbiznzhzs.supabase.co', SUPABASE_KEY='sb_publishable_Of2rbCk4isQw_c4ueZj7xQ_2_MlHoBt';
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let rows=[],tab='all',cur=null;
+$('login').onclick=()=>db.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});
+async function init(){
+ const {data:{session}}=await db.auth.getSession(); if(!session)return;
+ const {data:a}=await db.from('admins').select('email').maybeSingle();
+ if(!a){$('app').innerHTML='<div class="msg"><h3>This account is not an admin.</h3><p style="margin:10px"><button class="btn ghost" onclick="db.auth.signOut().then(()=>location.reload())">Sign out</button></p></div>';return}
+ $('app').innerHTML=`<div class="top"><h1>Admin panel</h1><div><button class="btn" id="xl">Download Excel</button> <button class="btn ghost" id="so">Sign out</button></div></div>
+ <div class="tabs" id="tabs"></div><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>WhatsApp</th><th>Service</th><th>Details</th><th>Applied</th><th>Status</th><th>Actions</th></tr></thead><tbody id="tb"></tbody></table></div>`;
+ $('so').onclick=()=>db.auth.signOut().then(()=>location.reload());
+ $('xl').onclick=()=>{const ws=XLSX.utils.json_to_sheet(rows.map(r=>({Name:r.full_name,Email:r.email,WhatsApp:r.whatsapp,Service:r.service,Details:r.brief,Status:r.status,Applied:new Date(r.created_at).toLocaleString()})));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Users');XLSX.writeFile(wb,'studio-users.xlsx')};
+ load();
+}
+async function load(){const {data,error}=await db.from('profiles').select('*').order('created_at',{ascending:false});if(error){alert(error.message);return}rows=data;draw()}
+function draw(){
+ const c=s=>rows.filter(r=>s==='all'||r.status===s).length;
+ $('tabs').innerHTML=['all','pending','approved','rejected'].map(s=>`<button class="btn ${tab===s?'on':''}" data-t="${s}">${s[0].toUpperCase()+s.slice(1)} (${c(s)})</button>`).join('');
+ $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;draw()});
+ const list=rows.filter(r=>tab==='all'||r.status===tab);
+ $('tb').innerHTML=list.length?list.map(r=>`<tr><td>${esc(r.full_name)}</td><td>${esc(r.email)}</td><td>${esc(r.whatsapp)}</td><td>${esc(r.service)}</td><td style="max-width:240px">${esc(r.brief)}</td><td>${new Date(r.created_at).toLocaleDateString()}</td><td><span class="pill ${r.status}">${r.status}</span></td>
+ <td style="white-space:nowrap"><button class="btn green" data-a="approved" data-i="${r.id}">Approve</button> <button class="btn red" data-a="rejected" data-i="${r.id}">Reject</button> <button class="btn" data-w="${r.id}">WhatsApp</button></td></tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:30px">No applications here yet.</td></tr>';
+ $('tb').querySelectorAll('[data-a]').forEach(b=>b.onclick=async()=>{const {error}=await db.from('profiles').update({status:b.dataset.a}).eq('id',b.dataset.i);error?alert(error.message):load()});
+ $('tb').querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{cur=rows.find(r=>r.id===b.dataset.w);$('wn').textContent=cur.full_name;$('wt').value='Hi '+cur.full_name+'! ';$('wa').showModal()});
+}
+$('wc').onclick=()=>$('wa').close();
+$('ws').onclick=()=>{window.open('https://wa.me/'+cur.whatsapp.replace(/\D/g,'')+'?text='+encodeURIComponent($('wt').value),'_blank');$('wa').close()};
+db.auth.onAuthStateChange(()=>init());init();
+</script></body></html>
