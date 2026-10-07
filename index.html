@@ -91,7 +91,7 @@ const box=document.getElementById('box');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function render(){
  const {data:{session}}=await db.auth.getSession();
- if(!session){box.innerHTML='<button class="btn" id="gbtn">Continue with Google</button>';gbtn.onclick=()=>db.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}
+if(!session){box.innerHTML='<button class="btn" id="gbtn">Continue with Google</button>';gbtn.onclick=()=>db.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});return}
  const u=session.user;
  const {data:p}=await db.from('profiles').select('*').eq('id',u.id).maybeSingle();
  if(p){const m={pending:['Your application is with our team. We\'ll message you on WhatsApp once it\'s approved.',''],approved:['You\'re approved! We\'ll message you on WhatsApp at '+esc(p.whatsapp)+'.','ok'],rejected:['We can\'t take this request right now. Reply on Instagram if you\'d like to talk.','']}[p.status];
