@@ -1,0 +1,105 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>BrightFrame Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{--ink:#16181d;--lime:#d4ff4f;--pink:#ff5c8a;--line:#e6e8dc;--soft:#6b705f;--bg:#fafbf3}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+.hide{display:none!important}.wrap{max-width:1180px;margin:0 auto;padding:20px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 20px;background:#fff;border-bottom:2px solid var(--ink)}
+.brand{font-weight:900;letter-spacing:.04em}.brand span{background:var(--lime);padding:2px 8px;border-radius:8px;margin-left:6px}
+.btn{border:2px solid var(--ink);background:#fff;color:var(--ink);padding:8px 14px;border-radius:999px;font-weight:800;font-size:13px;cursor:pointer}
+.btn:hover{background:var(--lime)}.btn.dark{background:var(--ink);color:#fff}.btn.sm{padding:5px 10px;font-size:12px}.btn.ok{background:var(--lime)}.btn.no{background:#ffd6e0}
+.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 8px 30px rgba(32,38,10,.06)}
+.login{max-width:380px;margin:12vh auto;text-align:center}.login input{width:100%;padding:11px;margin:6px 0;border:1px solid var(--line);border-radius:12px;font:inherit}
+.err{color:#c0183f;font-size:13px;margin-top:8px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:18px 0}.stats b{font-size:30px;display:block}.stats span{font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.1em;font-weight:800}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}.bar input,.bar select{padding:9px 12px;border:1px solid var(--line);border-radius:12px;font:inherit}.bar .grow{flex:1;min-width:180px}
+.tabs button.on{background:var(--ink);color:#fff}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--soft);padding:8px;border-bottom:2px solid var(--ink)}td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.badge{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:900;text-transform:uppercase;background:#fff3c4}.badge.approved{background:var(--lime)}.badge.rejected{background:#ffd6e0}
+.brief{max-width:260px;color:var(--soft)}td .btn{margin:0 4px 4px 0}
+.modal{position:fixed;inset:0;background:rgba(22,24,29,.55);display:flex;align-items:center;justify-content:center;padding:16px}.modal .card{width:100%;max-width:480px}.modal textarea{width:100%;min-height:150px;padding:10px;border:1px solid var(--line);border-radius:12px;font:inherit;margin:10px 0}
+</style></head><body>
+
+<div id="loginView" class="login card"><div class="brand">BRIGHTFRAME<span>ADMIN</span></div><p style="color:var(--soft);font-size:13px">Owner access only.</p>
+<button class="btn dark" style="width:100%" onclick="google()">Continue with Google</button><p style="font-size:12px;color:var(--soft)">or</p>
+<input id="em" type="nizamjinabade@gmail.com" placeholder="nizamjinabade@gmail.com"><input id="pw" type="nizam8788" placeholder="nizam8788"><button class="btn" style="width:100%;margin-top:6px" onclick="emailLogin()">Log in</button><div id="lerr" class="err"></div></div>
+
+<div id="denied" class="login card hide"><h2>Access denied</h2><p style="color:var(--soft)">This account is not the admin account.</p><button class="btn" onclick="logout()">Sign out</button></div>
+
+<div id="app" class="hide">
+<header><div class="brand">BRIGHTFRAME<span>ADMIN</span></div><div><span id="who" style="font-size:13px;color:var(--soft);margin-right:10px"></span><button class="btn sm" onclick="exportXlsx()">⬇ Export Excel</button> <button class="btn sm" onclick="load()">↻ Refresh</button> <button class="btn sm dark" onclick="logout()">Log out</button></div></header>
+<div class="wrap">
+<div class="stats" id="stats"></div>
+<div class="bar tabs"><button class="btn on" id="tApps" onclick="tab('apps')">Applications</button><button class="btn" id="tUsers" onclick="tab('users')">Users</button>
+<input class="grow" id="q" placeholder="Search name, email, service, WhatsApp…" oninput="render()"><select id="st" onchange="render()"><option value="">All statuses</option><option>pending</option><option>approved</option><option>rejected</option></select></div>
+<div class="card tw"><table><thead id="th"></thead><tbody id="tb"></tbody></table><p id="empty" class="hide" style="color:var(--soft);text-align:center">Nothing here yet.</p></div>
+</div></div>
+
+<div id="wa" class="modal hide"><div class="card"><b id="waTo"></b><textarea id="waMsg"></textarea><button class="btn ok" onclick="sendWa()">Open WhatsApp ↗</button> <button class="btn" onclick="$('wa').classList.add('hide')">Cancel</button></div></div>
+
+<script>
+const SUPABASE_URL='https://stkubarpndhteijzqiph.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_FMcNM1tgyyRYBAkZNdi_CA_mlbu4iWn';
+const DEFAULT_COUNTRY_CODE='91'; // added to 10-digit numbers for WhatsApp
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let users=[],apps=[],view='apps',waNum='';
+const byId=()=>Object.fromEntries(users.map(u=>[u.id,u]));
+const fmt=d=>d?new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'';
+const num=n=>{let d=String(n||'').replace(/\D/g,'');if(d.length===10)d=DEFAULT_COUNTRY_CODE+d;return d};
+
+async function google(){await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}})}
+async function emailLogin(){const {error}=await sb.auth.signInWithPassword({email:$('em').value.trim(),password:$('pw').value});if(error)$('lerr').textContent=error.message}
+async function logout(){await sb.auth.signOut();location.reload()}
+async function gate(session){
+ ['loginView','denied','app'].forEach(i=>$(i).classList.add('hide'));
+ if(!session){$('loginView').classList.remove('hide');return}
+ const {data:ok}=await sb.rpc('is_admin');   // real check happens in the database
+ if(ok!==true){$('denied').classList.remove('hide');return}
+ $('who').textContent=session.user.email;$('app').classList.remove('hide');load();
+}
+sb.auth.onAuthStateChange((e,s)=>{if(e==='INITIAL_SESSION'||e==='SIGNED_IN')setTimeout(()=>gate(s),0)});
+
+async function load(){
+ const [u,a]=await Promise.all([sb.from('profiles').select('*'),sb.from('applications').select('*').order('created_at',{ascending:false})]);
+ if(u.error||a.error){alert((u.error||a.error).message);return}
+ users=u.data;apps=a.data;render();
+}
+function tab(t){view=t;$('tApps').classList.toggle('on',t==='apps');$('tUsers').classList.toggle('on',t==='users');$('st').classList.toggle('hide',t!=='apps');render()}
+function render(){
+ const c=s=>apps.filter(x=>(x.status||'pending')===s).length;
+ $('stats').innerHTML=[['Users',users.length],['Applications',apps.length],['Pending',c('pending')],['Approved',c('approved')],['Rejected',c('rejected')]].map(([l,n])=>`<div class="card"><b>${n}</b><span>${l}</span></div>`).join('');
+ const q=$('q').value.toLowerCase(),st=$('st').value,P=byId();let rows;
+ if(view==='apps'){
+  $('th').innerHTML='<tr><th>Date</th><th>Client</th><th>Service</th><th>Brief</th><th>Status</th><th>Actions</th></tr>';
+  rows=apps.filter(a=>(!st||(a.status||'pending')===st)&&JSON.stringify([a,P[a.user_id]]).toLowerCase().includes(q)).map(a=>{const p=P[a.user_id]||{},s=a.status||'pending';
+   return `<tr><td>${fmt(a.created_at)}</td><td><b>${esc(p.full_name)}</b><br>${esc(p.email)}<br>${esc(p.whatsapp)}</td><td>${esc(a.service_name)}</td><td class="brief">${esc(a.project_description)}</td><td><span class="badge ${esc(s)}">${esc(s)}</span></td>
+   <td><button class="btn sm ok" data-act="approved" data-id="${esc(a.id)}">Approve</button><button class="btn sm no" data-act="rejected" data-id="${esc(a.id)}">Reject</button><button class="btn sm" data-wa="${esc(a.user_id)}" data-svc="${esc(a.service_name)}">WhatsApp</button></td></tr>`});
+ }else{
+  $('th').innerHTML='<tr><th>Name</th><th>Email</th><th>WhatsApp</th><th>Instagram</th><th>Requests</th><th></th></tr>';
+  rows=users.filter(p=>JSON.stringify(p).toLowerCase().includes(q)).map(p=>`<tr><td><b>${esc(p.full_name)}</b></td><td>${esc(p.email)}</td><td>${esc(p.whatsapp)}</td><td>${esc(p.instagram_username)}</td><td>${apps.filter(a=>a.user_id===p.id).length}</td><td><button class="btn sm" data-wa="${esc(p.id)}">WhatsApp</button></td></tr>`);
+ }
+ $('tb').innerHTML=rows.join('');$('empty').classList.toggle('hide',rows.length>0);
+}
+$('tb').addEventListener('click',async e=>{
+ const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.act){const {error}=await sb.from('applications').update({status:b.dataset.act}).eq('id',b.dataset.id);if(error){alert(error.message);return}
+  const a=apps.find(x=>String(x.id)===b.dataset.id);a.status=b.dataset.act;render();openWa(a.user_id,a.service_name,b.dataset.act)}
+ else if(b.dataset.wa)openWa(b.dataset.wa,b.dataset.svc,'')
+});
+function openWa(uid,svc,kind){
+ const p=byId()[uid]||{},n=p.full_name||'there',s=svc||'your project';waNum=num(p.whatsapp);
+ const T={approved:`Hi ${n}! 🎉 Your request for ${s} with BrightFrame Studio is approved. Please send your references and deadline here and we'll get started.`,rejected:`Hi ${n}, thanks for reaching out to BrightFrame Studio. Unfortunately we can't take on ${s} right now. We'd love to work with you in future!`};
+ $('waTo').textContent=`To: ${p.full_name||''} (${p.whatsapp||'no number'})`;$('waMsg').value=T[kind]||`Hi ${n}, this is BrightFrame Studio. `;$('wa').classList.remove('hide');
+}
+function sendWa(){if(!waNum){alert('This user has no WhatsApp number.');return}window.open('https://wa.me/'+waNum+'?text='+encodeURIComponent($('waMsg').value),'_blank','noopener');$('wa').classList.add('hide')}
+function exportXlsx(){
+ const P=byId(),wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(users.map(p=>({Name:p.full_name,Email:p.email,WhatsApp:p.whatsapp,Instagram:p.instagram_username}))),'Users');
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(apps.map(a=>{const p=P[a.user_id]||{};return{Date:fmt(a.created_at),Name:p.full_name,Email:p.email,WhatsApp:p.whatsapp,Service:a.service_name,Brief:a.project_description,Status:a.status}})),'Applications');
+ XLSX.writeFile(wb,'brightframe-export-'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+</script></body></html>
